@@ -19,6 +19,7 @@ struct ImageData {
 #[derive(Clone)]
 enum ProjectionData {
     Equirectangular(submaptive::Equirectangular),
+    AzimuthalEquidistant(submaptive::AzimuthalEquidistant),
 }
 
 impl ProjectionData {
@@ -26,6 +27,7 @@ impl ProjectionData {
         use ProjectionData::*;
         match self {
             Equirectangular(_) => ProjectionKind::Equirectangular,
+            AzimuthalEquidistant(_) => ProjectionKind::AzimuthalEquidistant,
         }
     }
 }
@@ -34,18 +36,28 @@ impl submaptive::Projection for ProjectionData {
     fn dimensions(&self) -> submaptive::Dimensions {
         match self {
             ProjectionData::Equirectangular(data) => data.dimensions(),
+            ProjectionData::AzimuthalEquidistant(data) => data.dimensions(),
         }
     }
 
     fn project(&self, point: &submaptive::Point) -> (f64, f64) {
         match self {
             ProjectionData::Equirectangular(data) => data.project(point),
+            ProjectionData::AzimuthalEquidistant(data) => data.project(point),
         }
     }
 
     fn invert(&self, projected_point: (f64, f64)) -> submaptive::Point {
         match self {
             ProjectionData::Equirectangular(data) => data.invert(projected_point),
+            ProjectionData::AzimuthalEquidistant(data) => data.invert(projected_point),
+        }
+    }
+
+    fn projected_point_within_bounds(&self, point: (f64, f64)) -> bool {
+        match self {
+            ProjectionData::Equirectangular(data) => data.projected_point_within_bounds(point),
+            ProjectionData::AzimuthalEquidistant(data) => data.projected_point_within_bounds(point),
         }
     }
 }
@@ -53,12 +65,13 @@ impl submaptive::Projection for ProjectionData {
 #[derive(PartialEq, Eq, Clone, Copy)]
 enum ProjectionKind {
     Equirectangular,
+    AzimuthalEquidistant,
 }
 
 impl ProjectionKind {
     pub fn all() -> impl Iterator<Item = Self> {
         use ProjectionKind::*;
-        vec![Equirectangular].into_iter()
+        vec![Equirectangular, AzimuthalEquidistant].into_iter()
     }
 
     pub fn default_projection_data(&self) -> ProjectionData {
@@ -67,6 +80,9 @@ impl ProjectionKind {
             Equirectangular => {
                 ProjectionData::Equirectangular(submaptive::Equirectangular::new().build())
             }
+            AzimuthalEquidistant => ProjectionData::AzimuthalEquidistant(
+                submaptive::AzimuthalEquidistant::new().build(),
+            ),
         }
     }
 }
@@ -76,6 +92,7 @@ impl std::fmt::Display for ProjectionKind {
         use ProjectionKind::*;
         fmt.write_str(match self {
             Equirectangular => "Equirectangular",
+            AzimuthalEquidistant => "Azimuthal equidistant",
         })
     }
 }
@@ -215,6 +232,35 @@ fn projection_ui(ui: &mut egui::Ui, projection: &mut ProjectionData, label: &str
                 submaptive::Equirectangular::new()
                     .central_long(central_long)
                     .true_scale_lat(true_scale_lat)
+                    .build(),
+            );
+        }
+        ProjectionData::AzimuthalEquidistant(azimuth_data) => {
+            let (mut center_long, mut center_lat) =
+                (azimuth_data.center().long(), azimuth_data.center().lat());
+            let mut central_long = azimuth_data.central_long();
+            ui.add(
+                egui::Slider::new(&mut center_lat, -90.0..=90.)
+                    .suffix("°")
+                    .clamp_to_range(true)
+                    .text("Center latitude"),
+            );
+            ui.add(
+                egui::Slider::new(&mut center_long, -180.0..=180.)
+                    .suffix("°")
+                    .clamp_to_range(true)
+                    .text("Center longitude"),
+            );
+            ui.add(
+                egui::Slider::new(&mut central_long, -180.0..=180.)
+                    .suffix("°")
+                    .clamp_to_range(true)
+                    .text("Central longitude"),
+            );
+            *projection = ProjectionData::AzimuthalEquidistant(
+                submaptive::AzimuthalEquidistant::new()
+                    .center((center_long, center_lat).try_into().unwrap())
+                    .central_long(central_long)
                     .build(),
             );
         }
